@@ -1,4 +1,6 @@
+Copie uniquement le code qui se trouve dans le bloc ci-dessous, sans copier les lignes de délimitation.
 
+```python
 import streamlit as st
 import pandas as pd
 
@@ -12,17 +14,15 @@ st.title("🔬 NEXORA SCIENCE")
 st.subheader("Plateforme d'analyse scientifique")
 
 st.write(
-    "Importe un fichier CSV pour explorer tes données, "
-    "visualiser les variables, détecter des valeurs inhabituelles "
-    "et générer un rapport scientifique."
+    "Importe un fichier CSV pour analyser tes données, "
+    "visualiser les résultats et générer un rapport scientifique."
 )
 
-fichier = st.file_uploader(
-    "Importer un fichier CSV",
-    type=["csv"]
-)
+fichier = st.file_uploader("Importer un fichier CSV", type=["csv"])
 
-if fichier is not None:
+if fichier is None:
+    st.info("Commence par importer un fichier CSV.")
+else:
     try:
         df = pd.read_csv(fichier)
 
@@ -35,26 +35,26 @@ if fichier is not None:
             st.dataframe(df.head(10), use_container_width=True)
 
             numeriques = df.select_dtypes(include="number")
+            valeurs_manquantes = int(df.isna().sum().sum())
 
-            st.subheader("2. Résumé du jeu de données")
+            st.subheader("2. Résumé des données")
 
             col1, col2, col3 = st.columns(3)
             col1.metric("Nombre de lignes", len(df))
             col2.metric("Nombre de colonnes", len(df.columns))
-            col3.metric(
-                "Valeurs manquantes",
-                int(df.isna().sum().sum())
-            )
+            col3.metric("Valeurs manquantes", valeurs_manquantes)
 
             rapport = [
-                "NEXORA SCIENCE — RAPPORT SCIENTIFIQUE",
+                "NEXORA SCIENCE - RAPPORT SCIENTIFIQUE",
                 "=" * 42,
                 "",
                 f"Nombre de lignes : {len(df)}",
                 f"Nombre de colonnes : {len(df.columns)}",
-                f"Valeurs manquantes : {int(df.isna().sum().sum())}",
-                "",
+                f"Valeurs manquantes : {valeurs_manquantes}",
+                ""
             ]
+
+            anomalies = []
 
             if not numeriques.empty:
                 st.subheader("3. Statistiques descriptives")
@@ -68,30 +68,24 @@ if fichier is not None:
                     ""
                 ])
 
-                st.subheader("4. Visualisation")
+                st.subheader("4. Graphique")
 
                 colonne = st.selectbox(
                     "Choisis une variable numérique",
-                    numeriques.columns
+                    list(numeriques.columns)
                 )
 
-                st.line_chart(
-                    numeriques[colonne].reset_index(drop=True)
-                )
+                st.line_chart(numeriques[colonne].reset_index(drop=True))
 
                 st.subheader("5. Détection des valeurs inhabituelles")
 
                 st.write(
-                    "La méthode utilisée est celle de l'intervalle "
-                    "interquartile (IQR). Elle signale les valeurs "
-                    "situées en dehors des limites statistiques."
+                    "La méthode IQR repère les valeurs situées en dehors "
+                    "de limites calculées à partir des quartiles."
                 )
 
-                anomalies_par_variable = {}
-                details_anomalies = []
-
-                for nom_colonne in numeriques.columns:
-                    serie = numeriques[nom_colonne].dropna()
+                for nom in numeriques.columns:
+                    serie = numeriques[nom].dropna()
 
                     if len(serie) < 4:
                         continue
@@ -103,79 +97,65 @@ if fichier is not None:
                     if iqr == 0:
                         continue
 
-                    limite_basse = q1 - 1.5 * iqr
-                    limite_haute = q3 + 1.5 * iqr
+                    borne_basse = q1 - 1.5 * iqr
+                    borne_haute = q3 + 1.5 * iqr
 
                     masque = (
-                        (numeriques[nom_colonne] < limite_basse)
-                        | (numeriques[nom_colonne] > limite_haute)
+                        (numeriques[nom] < borne_basse)
+                        | (numeriques[nom] > borne_haute)
                     )
 
-                    valeurs = numeriques.loc[masque, nom_colonne]
+                    for index, valeur in numeriques.loc[masque, nom].items():
+                        anomalies.append({
+                            "Ligne du fichier": index + 2,
+                            "Variable": nom,
+                            "Valeur": valeur,
+                            "Limite basse": round(borne_basse, 2),
+                            "Limite haute": round(borne_haute, 2)
+                        })
 
-                    if not valeurs.empty:
-                        anomalies_par_variable[nom_colonne] = len(valeurs)
+                if anomalies:
+                    tableau_anomalies = pd.DataFrame(anomalies)
 
-                        for index, valeur in valeurs.items():
-                            details_anomalies.append({
-                                "Ligne du fichier": index + 2,
-                                "Variable": nom_colonne,
-                                "Valeur inhabituelle": valeur,
-                                "Limite basse": round(limite_basse, 2),
-                                "Limite haute": round(limite_haute, 2)
-                            })
-
-                if details_anomalies:
                     st.warning(
-                        f"{len(details_anomalies)} valeur(s) inhabituelle(s) "
-                        "ont été détectées."
+                        f"{len(anomalies)} valeur(s) inhabituelle(s) détectée(s)."
                     )
-
                     st.dataframe(
-                        pd.DataFrame(details_anomalies),
+                        tableau_anomalies,
                         use_container_width=True
-                    )
-
-                    st.info(
-                        "Une valeur inhabituelle n'est pas nécessairement "
-                        "une erreur. Vérifie le contexte scientifique "
-                        "avant de tirer une conclusion."
                     )
 
                     rapport.extend([
                         "VALEURS INHABITUELLES",
-                        f"Nombre de valeurs signalées : {len(details_anomalies)}",
-                        pd.DataFrame(details_anomalies).to_string(index=False),
+                        tableau_anomalies.to_string(index=False),
                         ""
                     ])
                 else:
                     st.success(
-                        "Aucune valeur inhabituelle détectée par cette méthode."
+                        "Aucune valeur inhabituelle détectée par la méthode IQR."
                     )
-
                     rapport.extend([
                         "VALEURS INHABITUELLES",
-                        "Aucune valeur inhabituelle détectée par la méthode IQR.",
+                        "Aucune valeur détectée par la méthode IQR.",
                         ""
                     ])
 
-            else:
                 st.info(
-                    "Aucune colonne numérique n'a été détectée. "
-                    "Les statistiques et la détection des anomalies "
-                    "ne sont pas disponibles."
+                    "Une valeur inhabituelle n'est pas forcément une erreur. "
+                    "Elle doit être vérifiée dans son contexte scientifique."
                 )
 
+            else:
+                st.info("Aucune colonne numérique n'a été détectée.")
                 rapport.extend([
                     "STATISTIQUES",
                     "Aucune colonne numérique détectée.",
                     ""
                 ])
 
-            st.subheader("6. Rapport scientifique")
-
             texte_rapport = "\n".join(rapport)
 
+            st.subheader("6. Rapport scientifique")
             st.text_area(
                 "Rapport généré",
                 texte_rapport,
@@ -183,18 +163,12 @@ if fichier is not None:
             )
 
             st.download_button(
-                "Télécharger le rapport scientifique",
+                "Télécharger le rapport",
                 data=texte_rapport,
                 file_name="rapport_nexora_science.txt",
                 mime="text/plain"
             )
 
     except Exception as erreur:
-        st.error(
-            f"Impossible d'analyser ce fichier. "
-            f"Vérifie son format CSV. Détail : {erreur}"
-        )
-
-else:
-    st.info("Commence par importer un fichier CSV.")
+        st.error(f"Erreur lors de l'analyse du CSV : {erreur}")
 ```
