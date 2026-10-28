@@ -1,4 +1,4 @@
-Copie uniquement le code qui se trouve dans le bloc ci-dessous, sans copier les lignes de délimitation.
+
 
 ```python
 import streamlit as st
